@@ -298,7 +298,7 @@ export default function AccordionSentence(props) {
       <Stack direction="column">
         <Stack direction="row">
           <Stack spacing={1} direction={"column"}>
-            {props.score != null && props.score != 0.5 && !hidePrediction && (
+            {props.showPrediction && props.score != null && props.score != 0.5 && !hidePrediction && (
               <Stack
                 style={{
                   justifyContent: "center",

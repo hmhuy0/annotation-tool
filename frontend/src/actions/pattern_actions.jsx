@@ -116,9 +116,15 @@ export const fetchRelatedExample = createAsyncThunk(
     "workspace/combinedpatterns",
     async (request, { getState }) => {
       const signal = controller.signal;
-  
+      const state = getState();
+      const { currentBatch, batchSize } = request || {};
+
       var url = new URL(`${base_url}/annotations`);
-  
+      if (currentBatch !== undefined && batchSize !== undefined) {
+        url.searchParams.append('batch', currentBatch);
+        url.searchParams.append('batch_size', batchSize);
+      }
+
       const data = await fetch(url, {
         signal: signal,
         headers: {

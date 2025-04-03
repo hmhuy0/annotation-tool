@@ -772,7 +772,7 @@ class APIHelper:
 
         return patterns
     
-    def get_linear_model_results(self, refresh=False):
+    def get_linear_model_results(self, refresh=False, batch=None, batch_size=None):
         #check if patterns are in cache, this will most likely be true because in most cases the above 
         #function will be called before this function
         #if patterns are not cached we will synthesize and cache them in this function
@@ -784,7 +784,8 @@ class APIHelper:
             similarity_dict=self.similarity_dict, soft_threshold=self.soft_threshold, 
             pattern_customized_dict= self.pattern_customized_dict,
             deleted_patterns= self.synthesizer_collector[self.selected_theme].deleted_patterns,
-            pinned_patterns= self.synthesizer_collector[self.selected_theme].pinned_patterns
+            pinned_patterns= self.synthesizer_collector[self.selected_theme].pinned_patterns,
+            batch=batch, batch_size=batch_size
             )
             return res
 
@@ -811,7 +812,8 @@ class APIHelper:
                 return {"message": f"Not enough annotations for {self.selected_theme}"}
         res = train_linear_mode(df=df, data=self.data, theme=self.selected_theme, soft_match_on=self.soft_match_on,words_dict=self.words_dict, similarity_dict=self.similarity_dict, soft_threshold=self.soft_threshold, 
         pattern_customized_dict=self.pattern_customized_dict, deleted_patterns= self.synthesizer_collector[self.selected_theme].deleted_patterns,
-            pinned_patterns= self.synthesizer_collector[self.selected_theme].pinned_patterns)
+            pinned_patterns= self.synthesizer_collector[self.selected_theme].pinned_patterns,
+            batch=batch, batch_size=batch_size)
 
         return res
 

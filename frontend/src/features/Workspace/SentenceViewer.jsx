@@ -75,12 +75,15 @@ export default function SentenceViewer({
       const data = response.payload;
       if (!data || data["status_code"] != 300) {
         dispatch(changeSetting({ selectedSetting: 0 }));
-        dispatch(fetchCombinedPatterns()).then(() => {
-          // After retraining, advance to next batch
+        // First fetch predictions for current batch
+        dispatch(fetchCombinedPatterns({ currentBatch, batchSize: BATCH_SIZE })).then(() => {
+          // After retraining, advance to next batch and fetch predictions for it
           const allSentences = workspace.groups.flat();
           if ((currentBatch + 1) * BATCH_SIZE < allSentences.length) {
             setCurrentBatch(prev => prev + 1);
             setPositiveIds({});
+            // Fetch predictions for the new batch
+            dispatch(fetchCombinedPatterns({ currentBatch: currentBatch + 1, batchSize: BATCH_SIZE }));
           }
           console.log("Advanced to next batch");
         });
@@ -168,6 +171,7 @@ export default function SentenceViewer({
             setPopoverAnchor={setPopoverAnchor}
             setPopoverContent={setPopoverContent}
             setAnchorEl={setLabelSelectorAnchor}
+            showPrediction={true}
           />
         ))}
         <Stack direction="row" spacing={2} justifyContent="center" mt={2}>
@@ -243,6 +247,7 @@ export default function SentenceViewer({
               setPopoverAnchor={setPopoverAnchor}
               setPopoverContent={setPopoverContent}
               setAnchorEl={setLabelSelectorAnchor}
+              showPrediction={true}
             />
           ))}
           <Stack direction="row" spacing={2} justifyContent="center" mt={2}>

@@ -348,7 +348,7 @@ def feature_selector_2(df, k,  deleted_patterns=[], pinned_patterns=[]):
     return patterns
 
 def train_linear_mode(df, data, theme, soft_match_on=True, words_dict=None, similarity_dict=None, soft_threshold=0.6, soft_topk_on=False, 
-soft_topk=1, pattern_customized_dict=None, deleted_patterns=[], pinned_patterns=[]):
+soft_topk=1, pattern_customized_dict=None, deleted_patterns=[], pinned_patterns=[], batch=None, batch_size=None):
     print("pinned patterns ", pinned_patterns)
     print("deleted patterns ", deleted_patterns)
     outs = df["labels"].values
@@ -408,7 +408,17 @@ soft_topk=1, pattern_customized_dict=None, deleted_patterns=[], pinned_patterns=
 
     running_result = []
 
-    for sentence,id in zip(data["example"].values, data["id"].values):
+    # Only process the current batch if batch parameters are provided
+    if batch is not None and batch_size is not None:
+        start_idx = batch * batch_size
+        end_idx = min((batch + 1) * batch_size, len(data))
+        sentences = data["example"].values[start_idx:end_idx]
+        ids = data["id"].values[start_idx:end_idx]
+    else:
+        sentences = data["example"].values
+        ids = data["id"].values
+
+    for sentence,id in zip(sentences, ids):
         temp = []
         
         for i in range(len(selected_working_list)):
@@ -426,9 +436,15 @@ soft_topk=1, pattern_customized_dict=None, deleted_patterns=[], pinned_patterns=
     entire_dataset_ins = torch.Tensor(running_result)
 
     try:
-        entire_dataset_outs = torch.Tensor(data[theme].values).reshape(-1,1)
+        if batch is not None and batch_size is not None:
+            entire_dataset_outs = torch.Tensor(data[theme].values[start_idx:end_idx]).reshape(-1,1)
+        else:
+            entire_dataset_outs = torch.Tensor(data[theme].values).reshape(-1,1)
     except:
-        entire_dataset_outs = torch.Tensor([0]*len(data['id'].values.tolist())).reshape(-1,1)
+        if batch is not None and batch_size is not None:
+            entire_dataset_outs = torch.Tensor([0]*(end_idx-start_idx)).reshape(-1,1)
+        else:
+            entire_dataset_outs = torch.Tensor([0]*len(data['id'].values.tolist())).reshape(-1,1)
     
 
     print(entire_dataset_ins.shape)
@@ -436,7 +452,6 @@ soft_topk=1, pattern_customized_dict=None, deleted_patterns=[], pinned_patterns=
     overall_prob = sigmoid.forward(net.forward(entire_dataset_ins.float())) 
 
     overall_pred = overall_prob.detach().numpy()>0.5
-    ids = data['id'].values.tolist()
 
     overall_prf = precision_recall_fscore_support(entire_dataset_outs, overall_pred, average="binary")
 

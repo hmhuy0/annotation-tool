@@ -359,14 +359,14 @@ async def patterns(request: Request):
     return results
 
 @app.get("/annotations")
-async def annotations(request:Request, refresh:bool = False):
+async def annotations(request:Request, refresh:bool = False, batch:int = None, batch_size:int = None):
     user = request.headers.get('annotuser')
     if(user=="null" or user==None):
         return{
             "status_code":404,
             "message": "Unauthorized"
         }
-    results = await loop.run_in_executor(executor, user_to_apiHelper[user].get_linear_model_results, refresh)
+    results = await loop.run_in_executor(executor, user_to_apiHelper[user].get_linear_model_results, refresh, batch, batch_size)
     user_to_apiHelper[user].synthesizer_collector[user_to_apiHelper[user].selected_theme].results = results
     
     return results
