@@ -64,7 +64,6 @@ export default function AccordionSentence(props) {
   const handleShowMore = () => {
     if (expandMore) {
       setExpandMore(false);
-      props.retrain();
     } else {
       setExpandMore(true);
       setLoading(true);
@@ -194,9 +193,7 @@ export default function AccordionSentence(props) {
     dispatch(groupAnnotations({ ids: ids, label: label, positive: positive }));
     dispatch(
       groupAnnotationsRemote({ ids: ids, label: label, positive: positive })
-    ).then((response) => {
-      props.retrain();
-    });
+    );
   };
 
   const getSentenceParts = (sentence_list, start, end) => {
@@ -245,75 +242,38 @@ export default function AccordionSentence(props) {
   const handleAcceptOrReject = (elementId, score, accept) => {
     setShowAcceptorReject(false);
     if (accept == 1) {
-
-      if (score > 0.5) {
-        dispatch(
-          updateElementLabel({
-            elementId: elementId,
-            label: workspace.selectedTheme,
-            event: "ADD",
-          })
-        );
-        dispatch(
-          multiLabelData({
-            elementId: elementId,
-            label: workspace.selectedTheme,
-            positive: 1,
-          })
-        );
-      } else if (score < 0.5) {
-        dispatch(
-          updateNegativeElementLabel({
-            elementId: elementId,
-            theme: workspace.selectedTheme,
-            label: 0,
-          })
-        );
-
-        dispatch(
-          multiLabelData({
-            elementId: elementId,
-            label: workspace.selectedTheme,
-            positive: 0,
-          })
-        );
-      }
+      dispatch(
+        updateElementLabel({
+          elementId: elementId,
+          label: workspace.selectedTheme,
+          event: "ADD",
+        })
+      );
+      dispatch(
+        multiLabelData({
+          elementId: elementId,
+          label: workspace.selectedTheme,
+          positive: 1,
+        })
+      );
+      props.setPositiveIds({ element_id: elementId, label: 1 });
     } else if (accept == 0) {
       setHidePrediction(true);
-
-      if (score > 0.5) {
-        dispatch(
-          updateNegativeElementLabel({
-            elementId: elementId,
-            theme: workspace.selectedTheme,
-            label: 0,
-          })
-        );
-
-        dispatch(
-          multiLabelData({
-            elementId: elementId,
-            label: workspace.selectedTheme,
-            positive: 0,
-          })
-        );
-      } else if (score < 0.5) {
-        dispatch(
-          updateElementLabel({
-            elementId: elementId,
-            label: workspace.selectedTheme,
-            event: "ADD",
-          })
-        );
-
-        dispatch(
-          multiLabelData({
-            elementId: elementId,
-            label: workspace.selectedTheme,
-            positive: 1,
-          })
-        );
-      }
+      dispatch(
+        updateNegativeElementLabel({
+          elementId: elementId,
+          theme: workspace.selectedTheme,
+          label: 0,
+        })
+      );
+      dispatch(
+        multiLabelData({
+          elementId: elementId,
+          label: workspace.selectedTheme,
+          positive: 0,
+        })
+      );
+      props.setPositiveIds({ element_id: elementId, label: 0 });
     }
   };
   const findIt = (label) => {

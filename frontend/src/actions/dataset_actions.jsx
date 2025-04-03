@@ -78,10 +78,10 @@ export const fetchDataset = createAsyncThunk(
   
     let reorderedGroups = [...groups];
     switch (`${setting}`) {
-      case "3": //Do not Reorder
+      case "0": //Do not Reorder
         return reorderedGroups;
         break;
-      case "0":
+      case "1":
         groups.forEach((elementIds, index) => {
           elementIds.sort(function (a, b) {
             return -elements[a].score + elements[b].score;
@@ -92,7 +92,7 @@ export const fetchDataset = createAsyncThunk(
         return reorderedGroups;
   
         break;
-      case "1":
+      case "2":
         groups.forEach((elementIds, index) => {
           elementIds.sort(function (a, b) {
             return elements[a].score - elements[b].score;
@@ -103,7 +103,7 @@ export const fetchDataset = createAsyncThunk(
         return reorderedGroups;
   
         break;
-      case "2":
+      case "3":
         groups.forEach((elementIds, index) => {
           elementIds.sort(function (a, b) {
             return (

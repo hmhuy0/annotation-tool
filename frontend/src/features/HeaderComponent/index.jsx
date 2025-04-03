@@ -124,18 +124,6 @@ export default function Header(props) {
 
         <GroupingSettings />
 
-        <ProgressButton
-          color={props.color_code[props.selectedTheme]}
-          retrain={props.retrain}
-          userAnnotationTracker={props.userAnnotationTracker}
-          annotationPerRetrain={props.annotationPerRetrain}
-          value={
-            ((props.userAnnotationCount % props.annotationPerRetrain) /
-              props.annotationPerRetrain) *
-              100 || 0
-          }
-        />
-
         <Stack
           sx={{
             alignContent: "center",

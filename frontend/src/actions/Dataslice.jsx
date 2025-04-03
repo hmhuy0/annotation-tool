@@ -14,10 +14,10 @@ import { base_url } from "../assets/base_url";
 
 let controller = new AbortController();
 const settingsEnum = Object.freeze({
-  0: "Positives",
-  1: "Negatives",
-  2: "Unsure",
-  // 3: "Default",
+  0: "Default",
+  1: "Positives",
+  2: "Negatives",
+  3: "Unsure",
 });
 
 const groupingSettings = Object.freeze({

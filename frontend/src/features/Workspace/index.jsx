@@ -73,35 +73,28 @@ function Workspace() {
       if (workspace.loadingPatterns || workspace.loadingCombinedPatterns) {
         dispatch(abortApiCall());
       }
-      retrain();
     }
   }, [workspace.cacheHit]);
 
   const retrain = () => {
-    if (labelCounter > 0 || true) {
-      setLabelCounter(0);
-      dispatch(fetchPatterns()).then((response) => {
-        const data = response.payload;
-
-        if (!data || data["status_code"] != 300) {
-          dispatch(fetchCombinedPatterns());
-        }
-      });
-    }
+    dispatch(fetchPatterns()).then((response) => {
+      const data = response.payload;
+      if (!data || data["status_code"] != 300) {
+        dispatch(fetchCombinedPatterns());
+      }
+    });
   };
 
   const clear_session = () => {
-    setLabelCounter(0);
     setHovering(null);
-    // setPositiveIds({});
-    // setScrollPosition(0)
   };
 
   const handleChangeTheme = (value) => {
     clear_session();
     dispatch(setTheme({ theme: value })).then(() => {
-      if (workspace.userAnnotationCount > 0 && workspace.refresh) retrain();
-      else {
+      if (workspace.userAnnotationCount > 0 && workspace.refresh) {
+        retrain();
+      } else {
         dispatch(getCache());
       }
     });
@@ -117,21 +110,6 @@ function Workspace() {
       dispatch(fetchSelectedTheme());
     });
   }, []);
-
-  React.useEffect(() => {
-    if (
-      workspace.userAnnotationCount > 0 &&
-      workspace.userAnnotationTracker >= workspace.annotationPerRetrain
-    ) {
-      dispatch(fetchPatterns()).then((response) => {
-        const data = response.payload;
-        if (!data || data["status_code"] != 300) {
-          dispatch(changeSetting({ selectedSetting: 0 }));
-          dispatch(fetchCombinedPatterns());
-        }
-      });
-    }
-  }, [workspace.userAnnotationTracker]);
 
   const filterHovering = (hovering) => {
     let filteredDataset = [];
