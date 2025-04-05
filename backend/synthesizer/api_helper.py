@@ -10,6 +10,7 @@ from synthesizer.helpers import NN_classificaion
 from synthesizer.helpers import NN_multi_classificaion
 from synthesizer.helpers import pattern_clusters
 from synthesizer.cache_helper import RepeatedTimer
+from synthesizer.gpt_service import GPTService
 
 import pandas as pd
 import json
@@ -83,6 +84,8 @@ class APIHelper:
 
         self.restore_stash()
 
+        # Initialize GPT service
+        self.gpt_service = GPTService()
 
         # self.rt = RepeatedTimer(100, self.stash_stuff)
 
@@ -355,22 +358,63 @@ class APIHelper:
 
 
     def explain_pattern(self, pattern):
+        """Directly explain why text is related to the theme without using patterns."""
+        theme = self.selected_theme
+        if theme is None:
+            return {"error": "No theme selected"}
         
-        exp = {}
-        pattern = pattern.replace('+', ', ')
-        pattern = pattern.replace('|', ', ')
-        pattern_list = pattern.split(", ")
-        for pat in pattern_list:
-            pattern_expanded = expand_working_list(pat, soft_match_on=True, similarity_dict=self.similarity_dict, pattern_customized_dict=self.pattern_customized_dict)[0][0]
-            print("pattern expanded is ", pattern_expanded)
-            if('LEMMA' in pattern_expanded and pat[0]=='('):
-                print(pattern_expanded['LEMMA'])
-                exp[pat] = [True, pattern_expanded['LEMMA']["IN"]]
-            else:
-                 exp[pat] = [False, list(pattern_expanded.keys())]
-        return exp
+        # Check if GPT service is available
+        if not hasattr(self, 'gpt_service') or not self.gpt_service.is_available():
+            return {"error": "GPT service not available"}
+            
+        # Pattern is actually the example ID in this case
+        example_id = pattern
+        if example_id not in self.element_to_sentence:
+            return {"error": "Example not found"}
+            
+        example = str(self.element_to_sentence[example_id])
+        
+        # Directly query GPT about this example
+        prompt = f"""
+Text: "{example}"
+Theme: "{theme}"
 
+Explain why this text is relevant or not relevant to the theme. 
+Identify specific words or phrases that indicate relevance or non-relevance.
+
+Reply as a JSON with the following structure:
+{{
+  "relevant": true/false,
+  "explanation": "detailed explanation",
+  "highlighted_terms": ["term1", "term2", ...]
+}}
+"""
+        system_prompt = "You are an expert in text classification and thematic analysis."
+        response = self.gpt_service.call_chatgpt(prompt, system_prompt)
         
+        try:
+            # Parse the response as JSON
+            result = json.loads(response)
+            
+            explanations = {}
+            
+            # Format the explanation for the frontend
+            if "highlighted_terms" in result and result.get("highlighted_terms"):
+                explanations[example_id] = [
+                    result.get("highlighted_terms", []),  # Words that match
+                    0,  # Start index (placeholder)
+                    len(example.split()),  # End index (placeholder)
+                    result.get("explanation", "")  # Explanation text
+                ]
+                
+            return explanations
+            
+        except json.JSONDecodeError:
+            # Fallback if response is not valid JSON
+            return {"error": "Invalid response format"}
+
+
+
 
 
 ######################################################################################################################################################
@@ -697,125 +741,19 @@ class APIHelper:
         return (positive_examples, negative_examples)
 
     def synthesize_patterns(self):
-        
-        #aggregate examples
-        try:
-            positive_examples_id = self.theme_to_element[self.selected_theme]
-            if(len(positive_examples_id)==0):
-                response = {}
-                response["message"] = f"Nothing labeled for {self.selected_theme}"
-                response["status_code"] = 300
-                return response
-        except:
-            response = {}
-            response["message"] = f"Nothing labeled for {self.selected_theme}"
-            response["status_code"] = 300
-            return response
-        positive_examples = []
-        for id in list(positive_examples_id):
-            positive_examples.append(self.element_to_sentence[id])
-        
-        negative_examples_id = []
-        negative_examples = []
-        for elementId in list(self.element_to_label):
-            if(not self.selected_theme in self.element_to_label[elementId]):
-                negative_examples.append(self.element_to_sentence[elementId])
-                negative_examples_id.append(elementId)
-        print("negative data collection looks like ", self.theme_to_negative_element)
-        #if binary mode is true add elements from negative collection
-        if( self.selected_theme in self.theme_to_negative_element):
-            for elementId in list(self.theme_to_negative_element[self.selected_theme]):
-                if elementId not in negative_examples_id:
-                    negative_examples.append(self.element_to_sentence[elementId])
-                    negative_examples_id.append(elementId)
-
-        #sanity check
-        # print("POS ", positive_examples)
-        # print("NEG ", negative_examples)
-        
-
-        #check if we have data annotated
-        if len(positive_examples)==0:
-            response = {}
-            response["message"] = "Annotate Some More"
-            response["status_code"] = 300
-            return response
-        
-        #Check if data is in the chache
-        cached = self.ran_cache()
-
-        #For testing we will set the cache to none
-        cached = None
-
-        if(type(cached) != type(None)):
-            df = cached
-        else:
-            self.synthesizer_collector[self.selected_theme].set_params(positive_examples+self.positive_phrases, negative_examples+self.negative_phrases)
-            self.synthesizer_collector[self.selected_theme].find_patters()
-
-            
-
-            # df = self.save_cache(self.synthesizer_collector[self.selected_theme].patterns_set, positive_examples, negative_examples, positive_examples_id, negative_examples_id)
-            try:
-                df = self.save_cache(self.synthesizer_collector[self.selected_theme].patterns_set, positive_examples, negative_examples, positive_examples_id, negative_examples_id)
-                self.synthesizer_collector[self.selected_theme].df_tracker = df
-            except:
-                response = {}
-                response["message"] = "Annotate Some More"
-                response["status_code"] = 300
-
-                # print(self.synthesizer_collector[self.selected_theme].patterns_set)
-                return response
-        
-        patterns = get_patterns(df, self.labels)
-
-
-        return patterns
+        """
+        Return empty patterns without any pattern synthesis - we're directly using GPT for classification
+        """
+        # No need to synthesize patterns anymore since we're directly using GPT classification
+        # Just return empty patterns
+        return {"patterns": [], "scores": {}}
     
     def get_linear_model_results(self, refresh=False, batch=None, batch_size=None):
-        #check if patterns are in cache, this will most likely be true because in most cases the above 
-        #function will be called before this function
-        #if patterns are not cached we will synthesize and cache them in this function
-
-        if(refresh): #no need to resynthesize just pick new patters form the list
-            df = self.synthesizer_collector[self.selected_theme].df_tracker
-            res = train_linear_mode(df=df, data=self.data, 
-            theme=self.selected_theme, soft_match_on=self.soft_match_on,words_dict=self.words_dict, 
-            similarity_dict=self.similarity_dict, soft_threshold=self.soft_threshold, 
-            pattern_customized_dict= self.pattern_customized_dict,
-            deleted_patterns= self.synthesizer_collector[self.selected_theme].deleted_patterns,
-            pinned_patterns= self.synthesizer_collector[self.selected_theme].pinned_patterns,
-            batch=batch, batch_size=batch_size
-            )
-            return res
-
-
-        #Check if data is in the chache    
-        cached = self.synthesizer_collector[self.selected_theme].df_tracker
-
-        #For testing 
-        # cached = None
-        if(type(cached) != type(None)): #for test
-            df = cached
-        else:
-            res = self.synthesize_patterns()
-            
-            
-            if("status_code" in res and( res["status_code"]==404 or res['status_code']==300)):
-                return res
-            
-            cached = self.ran_cache() 
-            #TODO annotate some more data needs to be added here and maybe a way to check if we have enough data annotated
-            df = cached
-            if(type(df) == type(None)):
-                #TODO handle this in a better way, but if the code gets here we know that no patterns have been synthesized becuase there weren't enough annotations
-                return {"message": f"Not enough annotations for {self.selected_theme}"}
-        res = train_linear_mode(df=df, data=self.data, theme=self.selected_theme, soft_match_on=self.soft_match_on,words_dict=self.words_dict, similarity_dict=self.similarity_dict, soft_threshold=self.soft_threshold, 
-        pattern_customized_dict=self.pattern_customized_dict, deleted_patterns= self.synthesizer_collector[self.selected_theme].deleted_patterns,
-            pinned_patterns= self.synthesizer_collector[self.selected_theme].pinned_patterns,
-            batch=batch, batch_size=batch_size)
-
-        return res
+        """
+        Return GPT annotations directly without any pattern-based model.
+        """
+        # Call get_gpt_annotation to get results directly from GPT
+        return self.get_gpt_annotation()
 
     def delete_softmatch(self, pattern, soft_match):
         #TODO delete from similarity list
@@ -1008,6 +946,80 @@ class APIHelper:
     
     
     def get_bert_annotation(self):
+        """Use GPT for annotation and keyword highlighting if available."""
+        # Check if GPT service is available
+        if not hasattr(self, 'gpt_service') or not self.gpt_service.is_available():
+            # Fall back to original BERT method
+            return self._get_bert_annotation_original()
+        
+        # Get current dataset and theme
+        theme = self.selected_theme
+        if theme is None:
+            return {"status_code": 300, "message": "No theme selected"}
+            
+        # Collect examples to classify
+        examples = []
+        ids = []
+        for id, sentence in self.element_to_sentence.items():
+            if id not in self.element_to_label.get(theme, []) and id not in self.theme_to_negative_element.get(theme, []):
+                examples.append(str(sentence))
+                ids.append(id)
+                
+        if len(examples) == 0:
+            return {"status_code": 300, "message": "No unlabeled examples"}
+        
+        # Process in batches of maximum 10 examples
+        MAX_BATCH_SIZE = 10  # Increased from 5 to 10 as requested
+        scores = {}
+        explanation = {"GPT": {}}
+        
+        for i in range(0, len(examples), MAX_BATCH_SIZE):
+            batch_examples = examples[i:i+MAX_BATCH_SIZE]
+            batch_ids = ids[i:i+MAX_BATCH_SIZE]
+            
+            # Use GPT to classify this batch
+            batch_results = self.gpt_service.classify_sentences(batch_examples, theme)
+            
+            # Skip if there was an error
+            if isinstance(batch_results, dict) and "error" in batch_results:
+                continue
+                
+            # Process each result to get scores and explanations
+            for j, result in enumerate(batch_results):
+                if isinstance(result, dict) and "relevant" in result:
+                    id = batch_ids[j]
+                    
+                    # Get score
+                    score = 1.0 if result["relevant"] else 0.0
+                    if "explanation" in result and "uncertain" in result["explanation"].lower():
+                        score = 0.6 if result["relevant"] else 0.4
+                    
+                    scores[id] = score
+                    
+                    # If relevant, add explanation with highlighted terms
+                    if result["relevant"] and "indexes" in result:
+                        # Split the sentence into words
+                        words = examples[i+j].split()
+                        
+                        # Use indexes from GPT to determine which words to highlight
+                        try:
+                            highlighted_terms = [words[idx] for idx in result["indexes"] if idx < len(words)]
+                            
+                            # Format explanation for frontend
+                            if highlighted_terms:
+                                explanation["GPT"][id] = [
+                                    highlighted_terms,
+                                    0,  # Start index (placeholder)
+                                    len(words),  # End index (placeholder)
+                                    "GPT classification"  # Static text instead of result.get("explanation")
+                                ]
+                        except (TypeError, IndexError) as e:
+                            print(f"Error processing indexes: {e}")
+                
+        return {"scores": scores, "explanation": explanation}
+        
+    def _get_bert_annotation_original(self):
+        """The original BERT-based annotation method."""
         positive_examples, negative_examples = self.get_positive_and_negative_examples()
 
         try:
@@ -1018,7 +1030,7 @@ class APIHelper:
             for i in range(len(res)):
                 annotations[ids[i]] = res[i]
             
-            return annotations
+            return {"scores": annotations}
         except Exception as e:
             print(e)
             response = {}
@@ -1125,3 +1137,191 @@ class APIHelper:
         
         self.stash_stuff()
         return {"status_code":200, "message":f"Pattern {pattern} deleted from {theme}"}
+
+    def get_gpt_annotation(self, batch=None, batch_size=None):
+        """Use GPT directly for theme annotation without any pattern recognition."""
+        print("\n========== START get_gpt_annotation ==========")
+        print(f"Called with batch={batch}, batch_size={batch_size}")
+        print(f"Type of batch: {type(batch)}")  # Check if it's really an integer
+        
+        # Check if GPT service is available
+        if not hasattr(self, 'gpt_service') or not self.gpt_service.is_available():
+            print("GPT service not available, falling back to original method")
+            result = self._get_bert_annotation_original()
+            print("Completed _get_bert_annotation_original with result:", result.keys() if isinstance(result, dict) else result)
+            return result
+        
+        # Get current dataset and theme
+        theme = self.selected_theme
+        print(f"Selected theme: {theme}")
+        if theme is None:
+            print("No theme selected, returning early")
+            return {"status_code": 300, "message": "No theme selected"}
+        
+        # Set default batch size if not provided
+        MAX_BATCH_SIZE = 10
+        if batch_size is not None and batch_size > 0:
+            MAX_BATCH_SIZE = batch_size
+        print(f"Using batch size: {MAX_BATCH_SIZE}")
+            
+        try:
+            # Get all IDs from the dataset
+            all_ids = self.data["id"].values.tolist()
+            print(f"Total examples in dataset: {len(all_ids)}")
+            print(f"First 10 IDs in dataset: {all_ids[:10]}")
+            
+            # Print existing labeled examples for debugging
+            print(f"Current labels for theme {theme}:")
+            print(f"Positive examples: {self.element_to_label.get(theme, [])}")
+            print(f"Negative examples: {self.theme_to_negative_element.get(theme, [])}")
+            
+            # Filter for unlabeled examples
+            unlabeled_ids = []
+            print(f"Theme labels: {len(self.element_to_label.get(theme, []))} positive, {len(self.theme_to_negative_element.get(theme, []))} negative")
+            
+            for id in all_ids:
+                id_str = str(id)
+                if id_str not in self.element_to_label.get(theme, []) and id_str not in self.theme_to_negative_element.get(theme, []):
+                    unlabeled_ids.append(id_str)
+            
+            print(f"Total unlabeled examples: {len(unlabeled_ids)}")
+            print(f"First 20 unlabeled IDs: {unlabeled_ids[:20]}")
+            
+            if len(unlabeled_ids) == 0:
+                print("No unlabeled examples found, returning early")
+                return {"status_code": 300, "message": "No unlabeled examples"}
+            
+            # If batch is specified, use it to determine which examples to process
+            current_batch = []
+            if batch is not None:
+                # Calculate batch start index - force to integer
+                try:
+                    batch_int = int(batch)
+                    start_idx = batch_int * MAX_BATCH_SIZE
+                    print(f"Using batch {batch_int}, calculated start index: {start_idx}")
+                except (TypeError, ValueError) as e:
+                    print(f"Error converting batch to integer: {e}, using original value: {batch}")
+                    start_idx = batch * MAX_BATCH_SIZE
+                
+                if start_idx >= len(unlabeled_ids):
+                    print(f"Batch {batch} exceeds available examples ({start_idx} >= {len(unlabeled_ids)})")
+                    return {"status_code": 300, "message": "No more examples in this batch"}
+                
+                # Get IDs for this batch
+                end_idx = min(start_idx + MAX_BATCH_SIZE, len(unlabeled_ids))
+                current_batch = unlabeled_ids[start_idx:end_idx]
+                print(f"Processing batch {batch}: examples {start_idx} to {end_idx-1}, got {len(current_batch)} IDs")
+                print(f"IDs in this batch: {current_batch}")
+            else:
+                # Just take the first batch if no batch specified
+                current_batch = unlabeled_ids[:MAX_BATCH_SIZE]
+                print(f"No batch specified, processing first {len(current_batch)} examples")
+                print(f"IDs in first batch: {current_batch}")
+            
+            # Collect examples to classify
+            examples = []
+            ids = []
+            
+            print(f"Getting sentences for {len(current_batch)} IDs")
+            for i, id_str in enumerate(current_batch):
+                print(f"Processing ID {id_str} ({i+1}/{len(current_batch)})")
+                # Make sure we have the sentence in our dictionary
+                if id_str not in self.element_to_sentence:
+                    print(f"  Adding sentence for ID {id_str} to element_to_sentence")
+                    try:
+                        # Get the example from the dataframe - compare as strings
+                        row_matches = self.data[self.data["id"].astype(str) == id_str]
+                        if len(row_matches) == 0:
+                            print(f"  ERROR: No matching row found for ID {id_str}")
+                            print(f"  Data contains IDs: {self.data['id'].astype(str).tolist()[:20]}")
+                            continue
+                            
+                        sentence = row_matches["example"].values[0]
+                        print(f"  Found sentence: {sentence[:50]}...")
+                        self.element_to_sentence[id_str] = nlp(sentence)
+                    except Exception as e:
+                        print(f"  ERROR retrieving sentence for ID {id_str}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
+                else:
+                    print(f"  Using existing sentence for ID {id_str}")
+                
+                # Add to our list to process
+                examples.append(str(self.element_to_sentence[id_str]))
+                ids.append(id_str)
+            
+            if len(examples) == 0:
+                print("No examples to process in this batch")
+                return {"status_code": 300, "message": "No examples to process"}
+            
+            print(f"Collected {len(examples)} examples to process")
+            
+            # Process the batch
+            scores = {}
+            explanation = {"GPT": {}}
+            
+            print(f"Calling GPT service to classify {len(examples)} examples for theme '{theme}'")
+            # Use GPT to classify this batch
+            batch_results = self.gpt_service.classify_sentences(examples, theme)
+            
+            # Skip if there was an error
+            if isinstance(batch_results, dict) and "error" in batch_results:
+                print(f"Error in batch processing: {batch_results['error']}")
+                return {"status_code": 500, "message": f"Error: {batch_results['error']}"}
+                
+            print(f"Got classification results: {len(batch_results)}")
+            
+            # Process each result to get scores and explanations
+            for j, result in enumerate(batch_results):
+                if j < len(ids):  # Make sure we have a corresponding ID
+                    id = ids[j]
+                    print(f"Processing result {j+1}/{len(batch_results)} for ID {id}")
+                    
+                    if isinstance(result, dict) and "relevant" in result:
+                        # Get score
+                        score = 1.0 if result["relevant"] else 0.0
+                        if "explanation" in result and "uncertain" in result["explanation"].lower():
+                            score = 0.6 if result["relevant"] else 0.4
+                        
+                        scores[id] = score
+                        print(f"  Classified as {'relevant' if result['relevant'] else 'not relevant'} (score: {score})")
+                        
+                        # Add highlighted words for both relevant and non-relevant examples
+                        if "indexes" in result:
+                            # Split the sentence into words
+                            words = examples[j].split()
+                            
+                            # Use indexes from GPT to determine which words to highlight
+                            try:
+                                highlighted_terms = [words[idx] for idx in result["indexes"] if idx < len(words)]
+                                
+                                # Format explanation for frontend
+                                if highlighted_terms:
+                                    explanation["GPT"][id] = [
+                                        highlighted_terms,
+                                        0,  # Start index (placeholder)
+                                        len(words),  # End index (placeholder)
+                                        "GPT classification"  # Static text instead of result.get("explanation")
+                                    ]
+                                    print(f"  Added highlighted terms: {highlighted_terms}")
+                            except (TypeError, IndexError) as e:
+                                print(f"  ERROR processing indexes for example {id}: {e}")
+                                import traceback
+                                traceback.print_exc()
+                    else:
+                        print(f"  Invalid result format for ID {id}: {result}")
+                else:
+                    print(f"WARNING: Result index {j} has no corresponding ID")
+            
+            print(f"Classification complete. Processed {len(scores)} examples with GPT.")
+            print(f"Returning {len(scores)} scores and {len(explanation.get('GPT', {}))} explanations")
+            print("========== END get_gpt_annotation ==========\n")
+            return {"scores": scores, "explanation": explanation}
+            
+        except Exception as e:
+            print(f"CRITICAL ERROR in get_gpt_annotation: {e}")
+            import traceback
+            traceback.print_exc()
+            print("========== END get_gpt_annotation (with error) ==========\n")
+            return {"status_code": 500, "message": f"Error: {str(e)}", "scores": {}, "explanation": {}}

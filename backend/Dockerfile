@@ -7,6 +7,9 @@ WORKDIR /app
 # Add the current directory contents into the container at /app
 ADD . /app
 
+# Set the OPENAI_API_KEY environment variable
+ENV OPENAI_API_KEY=
+
 # Install any needed packages specified in requirements.txt
 RUN pip install -r requirements.txt
 

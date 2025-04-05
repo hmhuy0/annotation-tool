@@ -11,6 +11,7 @@ import { fetchCombinedPatterns, fetchPatterns } from "../../actions/pattern_acti
 import { Chip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { lighten } from "@material-ui/core";
+import { base_url } from "../../assets/base_url";
 
 import Fab from "@mui/material/Fab";
 import LabelSelector from "../../sharedComponents/LabelSelector/labelselector";
@@ -55,40 +56,126 @@ export default function SentenceViewer({
   };
 
   const handleBatchLabeling = () => {
+    console.log("==========================================");
     console.log("Starting batch labeling process");
+    console.log("Current batch:", currentBatch);
+    console.log("Current state:", workspace);
     setHovering(null);
 
     const currentBatchSentences = getCurrentBatch(workspace.groups.flat());
     const labeledCount = getCurrentBatchLabeledCount(workspace.groups.flat());
 
     console.log("Current batch sentences:", currentBatchSentences);
-    console.log("Labeled count:", labeledCount);
+    console.log("Labeled count:", labeledCount, "of", BATCH_SIZE);
 
     if (labeledCount < BATCH_SIZE) {
-      console.log("Not all samples are labeled yet");
+      console.log("Not all samples are labeled yet, returning early");
+      console.log("==========================================");
       return;
     }
 
-    // Trigger retraining
-    dispatch(fetchPatterns()).then((response) => {
-      console.log("Fetch patterns response:", response);
-      const data = response.payload;
-      if (!data || data["status_code"] != 300) {
-        dispatch(changeSetting({ selectedSetting: 0 }));
-        // First fetch predictions for current batch
-        dispatch(fetchCombinedPatterns({ currentBatch, batchSize: BATCH_SIZE })).then(() => {
-          // After retraining, advance to next batch and fetch predictions for it
-          const allSentences = workspace.groups.flat();
-          if ((currentBatch + 1) * BATCH_SIZE < allSentences.length) {
-            setCurrentBatch(prev => prev + 1);
-            setPositiveIds({});
-            // Fetch predictions for the new batch
-            dispatch(fetchCombinedPatterns({ currentBatch: currentBatch + 1, batchSize: BATCH_SIZE }));
+    // Skip pattern generation and directly advance to next batch
+    console.log("Advancing to next batch");
+    
+    // First fetch predictions for current batch to ensure everything is processed
+    console.log("Fetching predictions for current batch:", currentBatch);
+    
+    const fetchCurrentBatch = dispatch(fetchCombinedPatterns({ currentBatch, batchSize: BATCH_SIZE }));
+    
+    console.log("Promise for current batch:", fetchCurrentBatch);
+    console.log("Adding then handler to promise");
+    
+    fetchCurrentBatch.then((response) => {
+      console.log("Current batch response received:", response);
+      
+      // Advance to next batch and fetch predictions for it
+      const allSentences = workspace.groups.flat();
+      console.log("Total sentences:", allSentences.length);
+      console.log("Next batch would start at:", (currentBatch + 1) * BATCH_SIZE);
+      
+      if ((currentBatch + 1) * BATCH_SIZE < allSentences.length) {
+        const nextBatch = currentBatch + 1;
+        console.log(`Moving to batch ${nextBatch}`);
+        
+        console.log("Setting currentBatch to:", nextBatch);
+        setCurrentBatch(nextBatch);
+        
+        console.log("Clearing positiveIds");
+        setPositiveIds({});
+        
+        // Special handling for batch 1 - try a different approach
+        if (nextBatch === 1) {
+          console.log("SPECIAL HANDLING FOR BATCH 1");
+          console.log("This is where we had issues before - trying a different approach");
+          
+          // Try a direct fetch 
+          try {
+            console.log("Making a direct fetch request for batch 1");
+            
+            const userStr = window.localStorage.getItem("user");
+            const user = userStr ? userStr.replaceAll('"', "") : "unknown"; 
+            // Use the same base URL as the rest of the app
+            const directUrl = `${base_url}/annotations?batch=1&batch_size=${BATCH_SIZE}`;
+            
+            console.log(`Direct fetch URL: ${directUrl}`);
+            console.log(`User: ${user}`);
+            
+            // Make a direct fetch request (this bypasses Redux and AbortController)
+            fetch(directUrl, {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                "credentials": "include",
+                "annotuser": user
+              }
+            })
+            .then(response => {
+              console.log("Direct fetch response received:", response);
+              if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
+              }
+              return response.json();
+            })
+            .then(data => {
+              console.log("Direct fetch data received:", data);
+            })
+            .catch(error => {
+              console.error("Direct fetch error:", error);
+            });
+          } catch (error) {
+            console.error("Error in direct fetch attempt:", error);
           }
-          console.log("Advanced to next batch");
-        });
+        }
+        
+        // Fetch predictions for the new batch using dispatch
+        console.log("Dispatching fetchCombinedPatterns for next batch:", nextBatch);
+        const fetchNextBatch = dispatch(fetchCombinedPatterns({ currentBatch: nextBatch, batchSize: BATCH_SIZE }));
+        
+        console.log("Promise for next batch:", fetchNextBatch);
+        
+        fetchNextBatch
+          .then((response) => {
+            console.log("Next batch data fetched successfully:", response);
+            console.log("==========================================");
+          })
+          .catch((error) => {
+            console.error("Error fetching next batch:", error);
+            console.error("Error details:", JSON.stringify(error));
+            console.log("==========================================");
+          });
+      } else {
+        console.log("No more batches available");
+        console.log("==========================================");
       }
+      console.log("Advanced to next batch");
+    })
+    .catch((error) => {
+      console.error("Error processing current batch:", error);
+      console.error("Error details:", JSON.stringify(error));
+      console.log("==========================================");
     });
+    
+    console.log("handleBatchLabeling completed, waiting for promises");
   };
 
   const getCurrentBatch = (groups) => {
@@ -118,11 +205,33 @@ export default function SentenceViewer({
   };
 
   const handleNextBatch = () => {
+    console.log("========== NEXT BATCH HANDLER ==========");
     const allSentences = workspace.groups.flat();
-    if ((currentBatch + 1) * BATCH_SIZE < allSentences.length) {
-      setCurrentBatch(prev => prev + 1);
+    const nextBatch = currentBatch + 1;
+    
+    if (nextBatch * BATCH_SIZE < allSentences.length) {
+      console.log(`Moving to batch ${nextBatch} directly`);
+      
+      // Update UI state first
+      setCurrentBatch(nextBatch);
       setPositiveIds({});
+      
+      // Then fetch the data
+      console.log(`Fetching data for batch ${nextBatch}`);
+      dispatch(fetchCombinedPatterns({ 
+        currentBatch: nextBatch, 
+        batchSize: BATCH_SIZE 
+      }))
+      .then(response => {
+        console.log("Batch data fetched successfully:", response);
+      })
+      .catch(error => {
+        console.error("Error fetching batch data:", error);
+      });
+    } else {
+      console.log("No more batches available");
     }
+    console.log("========== END NEXT BATCH HANDLER ==========");
   };
 
   const handlePrevBatch = () => {
@@ -185,14 +294,13 @@ export default function SentenceViewer({
           <Button 
             variant="contained" 
             onClick={() => {
-              console.log("Current batch labeled count:", getCurrentBatchLabeledCount(workspace.groups.flat()));
-              console.log("Current positiveIds:", positiveIds);
-              handleBatchLabeling();
+              console.log("NEXT BATCH button clicked");
+              handleNextBatch();
             }}
             disabled={getCurrentBatchLabeledCount(workspace.groups.flat()) < BATCH_SIZE}
             color="primary"
           >
-            Retrain & Next Batch ({getCurrentBatchLabeledCount(workspace.groups.flat())}/{BATCH_SIZE})
+            Next Batch ({getCurrentBatchLabeledCount(workspace.groups.flat())}/{BATCH_SIZE})
           </Button>
         </Stack>
       </Stack>

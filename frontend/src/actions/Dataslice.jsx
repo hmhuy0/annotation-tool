@@ -1048,8 +1048,10 @@ const DataSlice = createSlice({
 
     [fetchCombinedPatterns.fulfilled]: (state, action) => {
       const data = action.payload;
+      console.log("fetchCombinedPatterns.fulfilled - PAYLOAD:", JSON.stringify(data, null, 2));
 
       if (data.message) {
+        console.log("Received message:", data.message);
         return {
           ...state,
           modelAnnotationCount: 0,
@@ -1059,63 +1061,64 @@ const DataSlice = createSlice({
       }
 
       let modelAnnotationCount = 0;
-
-      let selectedSetting = JSON.parse(JSON.stringify(state.selectedSetting));
-
-      let patterns = JSON.parse(JSON.stringify(state.patterns));
-
-      let dataset = JSON.parse(JSON.stringify(state.dataset));
-
+      
       let elements = JSON.parse(JSON.stringify(state.elements));
-
-      let reorderedGroups = JSON.parse(JSON.stringify(state.groups));
-
-      for (const [key, value] of Object.entries(data["scores"])) {
-        elements[key]["score"] = value;
-
-        if (value != 0.5) modelAnnotationCount += 1;
+      
+      // Process scores - this is what updates the predictions
+      if (data.scores) {
+        console.log("Processing scores:", Object.keys(data.scores).length);
+        console.log("Scores sample:", JSON.stringify(Object.entries(data.scores).slice(0, 3)));
+        for (const [key, value] of Object.entries(data.scores)) {
+          if (elements[key]) {
+            console.log(`Setting score for ${key}: ${value}`);
+            elements[key].score = value;
+            if (value !== 0.5) modelAnnotationCount += 1;
+          } else {
+            console.log(`Warning: Element ${key} not found in state`);
+          }
+        }
+      } else {
+        console.log("No scores received in payload");
       }
 
-
-      reorderedGroups = reorderDataset(
-        dataset,
-        selectedSetting,
-        elements,
-        reorderedGroups
-      );
-
-      let selectedPatterns = {};
-      data.patterns.forEach((element) => {
-        selectedPatterns[element["pattern"]] = element["weight"];
-        try {
-          patterns[element["pattern"]]["status"] = 1;
-        } catch {
-          console.log("Caught Error: pattern doesn't exist");
-        }
-      });
-
+      // We're no longer using patterns, using a simple empty object instead
+      const selectedPatterns = {};
+      
+      // Store explanation data for highlighting
       const selectedTheme = JSON.parse(JSON.stringify(state.selectedTheme));
+      console.log("Selected theme:", selectedTheme);
+      
+      // Save to cache
       combinedPatterns_cache[selectedTheme] = data;
-      explanations_cache[selectedTheme] = data.explanation;
+      
+      // Log explanations for debugging
+      if (data.explanation) {
+        console.log("Received explanations:", Object.keys(data.explanation));
+        console.log("Explanation sample:", JSON.stringify(Object.entries(data.explanation).slice(0, 1)));
+      } else {
+        console.log("No explanations received in payload");
+      }
+      
+      explanations_cache[selectedTheme] = data.explanation || {};
       selectedPatterns_cache[selectedTheme] = selectedPatterns;
-      patterns_cache[selectedTheme] = patterns;
       modelannotationCount_cache[selectedTheme] = modelAnnotationCount;
 
+      // Create new explanation state including existing USER_DEFINED entries
       const explanation = JSON.parse(JSON.stringify(state.explanation));
       let new_explanation = data.explanation || {};
-      new_explanation["USER_DEFINED"] = explanation["USER_DEFINED"];
+      new_explanation["USER_DEFINED"] = explanation["USER_DEFINED"] || {};
+      
+      console.log("Updating state with new predictions and explanations");
+      console.log("Final explanation keys:", Object.keys(new_explanation));
 
       return {
         ...state,
         combinedPatterns: data,
         loadingCombinedPatterns: false,
         explanation: new_explanation,
-        dataset: dataset,
-        patterns: patterns,
         elements: elements,
         modelAnnotationCount: modelAnnotationCount,
         selectedPatterns: selectedPatterns,
-        groups: reorderedGroups,
       };
     },
   },

@@ -31,6 +31,9 @@ import {
   updateBinaryMode,
 } from "../../actions/Dataslice";
 import { addThemeRemote, setTheme } from "../../actions/theme_actions";
+import Menu from '@mui/material/Menu';
+import { setGPTConfig } from '../../actions/pattern_actions';
+
 export default function Header(props) {
   const dispatch = useDispatch();
 
@@ -44,6 +47,9 @@ export default function Header(props) {
 
   React.useState(0);
   const [nextColor, setNextColor] = React.useState(null);
+  const [gptModel, setGptModel] = React.useState('o3-mini');
+  const [useGpt, setUseGpt] = React.useState(true);
+  const [settingsAnchorEl, setSettingsAnchorEl] = React.useState(null);
 
   React.useEffect(() => {
     setNextColor(workspace.color_schema[workspace.themes.length]);
@@ -90,6 +96,26 @@ export default function Header(props) {
   const handleChangeBinaryMode = () => {
     dispatch(updateBinaryMode());
     dispatch(toggleBinaryMode({ binary_mode: props.binary_mode }));
+  };
+
+  const handleSettingsClick = (event) => {
+    setSettingsAnchorEl(event.currentTarget);
+  };
+
+  const handleSettingsClose = () => {
+    setSettingsAnchorEl(null);
+  };
+  
+  const handleGptModelChange = (event) => {
+    const newModel = event.target.value;
+    setGptModel(newModel);
+    dispatch(setGPTConfig({ model: newModel, use_gpt: useGpt }));
+  };
+  
+  const handleUseGptChange = (event) => {
+    const newUseGpt = event.target.checked;
+    setUseGpt(newUseGpt);
+    dispatch(setGPTConfig({ model: gptModel, use_gpt: newUseGpt }));
   };
 
   return (
@@ -351,6 +377,45 @@ export default function Header(props) {
             </Stack>
           }
         />
+
+        <Button
+          color="inherit"
+          onClick={handleSettingsClick}
+        >
+          Settings
+        </Button>
+        <Menu
+          id="settings-menu"
+          anchorEl={settingsAnchorEl}
+          open={Boolean(settingsAnchorEl)}
+          onClose={handleSettingsClose}
+        >
+          <MenuItem>
+            <FormControl sx={{ m: 1, minWidth: 200 }}>
+              <InputLabel>GPT Model</InputLabel>
+              <Select
+                value={gptModel}
+                onChange={handleGptModelChange}
+                label="GPT Model"
+              >
+                <MenuItem value="o3-mini">O3-Mini</MenuItem>
+                <MenuItem value="gpt-4o">GPT-4o</MenuItem>
+                <MenuItem value="gpt-3.5-turbo">GPT-3.5 Turbo</MenuItem>
+              </Select>
+            </FormControl>
+          </MenuItem>
+          <MenuItem>
+            <FormControlLabel
+              control={
+                <Switch 
+                  checked={useGpt}
+                  onChange={handleUseGptChange}
+                />
+              }
+              label="Use GPT for pattern generation"
+            />
+          </MenuItem>
+        </Menu>
       </Stack>
     </AppBar>
   );
